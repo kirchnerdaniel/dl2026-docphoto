@@ -49,4 +49,51 @@ def build_splits(df: pd.DataFrame, group_column: str = "group_strict", val_fract
     looks like. Together they cover every row exactly once, and no value of
     `group_column` is on both sides.
     """
-    raise NotImplementedError("TASK 1: the grouped split")
+    if group_column not in df.columns:
+        raise ValueError(f"Column '{group_column}' not found in DataFrame.")
+
+    if df.empty:
+        raise ValueError("Cannot split an empty DataFrame.")
+
+    if df[group_column].isna().any():
+        raise ValueError(f"Missing values in '{group_column}'.")
+
+    if not 0 < val_fraction < 1:
+        raise ValueError("val_fraction must be between 0 and 1.")
+
+    # 1. Take distinct group values in ascending order.
+    groups = np.sort(df[group_column].unique())
+
+    if len(groups) < 2:
+        raise ValueError("At least two distinct groups are required.")
+
+    # 2. Shuffle them reproducibly.
+    rng = np.random.default_rng(seed)
+    rng.shuffle(groups)
+
+    # 3. Add whole groups to validation until the row target is reached.
+    target_rows = val_fraction * len(df)
+    val_groups = []
+    val_rows = 0
+
+    group_sizes = df[group_column].value_counts()
+
+    for group in groups:
+        val_groups.append(group)
+        val_rows += group_sizes[group]
+
+        if val_rows >= target_rows:
+            break
+
+    # Keep at least one group in training.
+    if len(val_groups) == len(groups):
+        val_groups.pop()
+
+    val_mask = df[group_column].isin(val_groups).to_numpy()
+
+    # Positional indices, independent of df.index.
+    train_idx = np.flatnonzero(~val_mask)
+    val_idx = np.flatnonzero(val_mask)
+
+    return train_idx, val_idx
+
